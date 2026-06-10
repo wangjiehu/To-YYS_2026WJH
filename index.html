@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Python 修炼关卡 - 交互式学习平台</title>
+  <meta name="description" content="一个免安装、零门槛的 Python 交互式学习平台。通过米白色护眼主题、100个循序渐进的闯关任务以及内置的浏览器端 Python 运行环境，从基础语法一路练到独立开发。">
+  
+  <!-- CSS Stylesheets -->
+  <link rel="stylesheet" href="styles.css?v=48">
+  
+  <!-- Early global error handler (拦截脚本加载失败与运行时错误) -->
+  <script>
+    window.addEventListener('error', function(event) {
+      // 过滤掉静态资源的 error 事件（由动态脚本加载器统一处理重试）
+      if (event.target && (event.target.tagName === 'SCRIPT' || event.target.tagName === 'LINK')) {
+        console.warn("静态资源加载失败，正尝试切换备用节点:", event.target.src || event.target.href);
+        return;
+      }
+      
+      console.error("捕获到全局错误:", event.error || event.message);
+      const detailBody = document.getElementById('lesson-detail-body');
+      if (detailBody) {
+        detailBody.innerHTML = `
+          <div style="padding: 16px; background-color: var(--error-bg); border-left: 4px solid var(--error); border-radius: 4px; color: var(--error); font-family: monospace; font-size: 14px; line-height: 1.5;">
+            <h4 style="margin-bottom: 8px; font-weight: bold; color: var(--error);">❌ 页面运行环境错误 (JavaScript Error)</h4>
+            <p style="color: var(--text-main);"><strong>错误详情:</strong> ${event.message || (event.error && event.error.message)}</p>
+            <p><strong>错误位置:</strong> ${event.filename || '未知'}:${event.lineno || '0'}:${event.colno || '0'}</p>
+            <p style="margin-top: 12px; font-size: 12px; color: var(--text-muted);">这通常由于 CDN 资源加载失败或浏览器安全限制引起。请复制或截图此错误信息发送给我！</p>
+          </div>
+        `;
+      }
+      const detailTitle = document.getElementById('lesson-detail-title');
+      if (detailTitle) {
+        detailTitle.innerText = "网页初始化失败";
+      }
+      const loaderText = document.getElementById('loader-text');
+      if (loaderText) {
+        loaderText.innerText = "脚本执行出错: " + (event.message || '请查看控制台');
+      }
+    }, true); // 使用 capture 捕获资源加载错误
+  </script>
+</head>
+<body>
+  <!-- Prevent theme flashing on load -->
+  <script>
+    (function() {
+      try {
+        const savedTheme = localStorage.getItem('python_learning_hub_theme');
+        if (savedTheme === 'dark') {
+          document.body.classList.add('dark-mode');
+        }
+      } catch (err) {
+        console.warn('读取主题设置失败，使用默认主题。', err);
+      }
+    })();
+  </script>
+
+  <!-- Password Lock Screen Overlay -->
+  <div class="lock-overlay" id="lock-overlay">
+    <div class="lock-card">
+      <div class="lock-icon">🎁</div>
+      <h2 class="lock-title">专属定制 Python 修炼场</h2>
+      <p class="lock-subtitle">这是一份为你特别定制的生日礼物 🎂<br>输入解锁暗号开启你的 Python 修炼之旅：</p>
+      
+      <div class="lock-input-group">
+        <input type="password" id="lock-password-input" class="lock-input" placeholder="输入解锁暗号..." autofocus>
+        <button id="lock-submit-btn" class="lock-btn">🔑 解锁修炼场</button>
+      </div>
+      <div id="lock-error-msg" class="lock-error">❌ 暗号不对哦，再试一次吧！</div>
+      
+      <div class="lock-footer">
+        Designed by WJH
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating Canvas for Confetti Fireworks -->
+  <canvas id="confetti-canvas"></canvas>
+
+
+
+  <div class="app-container">
+    
+    <!-- Top Navigation Header -->
+    <header class="app-header">
+      <div class="brand-section">
+        <div class="logo-icon">Py</div>
+        <h1 class="logo-text">Python <span>修炼关卡</span></h1>
+      </div>
+      
+      <!-- Global Progress Bar -->
+      <div class="progress-area">
+        <span class="progress-label" id="progress-header-label">修炼进度: 0/100 关</span>
+        <div class="progress-bar-outer">
+          <div class="progress-bar-inner" id="progress-bar"></div>
+        </div>
+        <span class="progress-percentage" id="progress-pct">0%</span>
+      </div>
+      
+      <!-- Sound & Settings Buttons -->
+      <div class="header-actions">
+        <button class="btn-icon" id="btn-theme" title="切换主题">🌙</button>
+        <button class="btn-icon" id="btn-lock" title="锁定修炼场">🔒</button>
+        <button class="btn-icon" id="btn-sound" title="切换音效">🔊</button>
+        <button class="btn-icon" id="btn-reset-progress" title="重置学习进度">🔄</button>
+      </div>
+    </header>
+
+    <!-- Main Workspace Dashboard -->
+    <main class="dashboard-main">
+      
+      <!-- Left sidebar: Level map -->
+      <aside class="sidebar-map" id="sidebar-lessons">
+        <div class="sidebar-title">关卡地图</div>
+        <!-- Level groups will be rendered dynamically here -->
+      </aside>
+
+      <!-- Center-Left: Detailed Lesson & Tutorial Instruction -->
+      <section class="content-panel" id="content-panel">
+        <div class="lesson-content">
+          <!-- Lesson details rendering target -->
+          <h3 id="lesson-detail-title">加载中...</h3>
+          <div id="lesson-detail-body">
+            <p>正在努力为您准备精彩的教学内容...</p>
+          </div>
+          
+          <!-- Dynamic Task Requirement Box -->
+          <div class="task-card">
+            <p class="task-description" id="task-text">请阅读上方教学说明，任务稍后显示在下方。</p>
+            
+            <!-- Foldable Hint panel -->
+            <div class="hint-accordion">
+              <button class="hint-trigger" id="btn-hint">
+                💡 <span id="btn-hint-text">查看提示</span>
+              </button>
+              <div class="hint-content" id="hint-content">
+                这里是本关的贴心小提示。
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Right: Interactive Code Editor & Console Terminal -->
+      <section class="workspace-panel">
+        
+        <!-- Pyodide Engine Initial Loading Screen -->
+        <div class="loading-overlay" id="pyodide-loader">
+          <div class="spinner"></div>
+          <div class="loading-text" id="loader-text">正在初始化 Python 编译器与编辑器...</div>
+        </div>
+        
+        <!-- Monaco Editor Panel -->
+        <div class="editor-container">
+          <div class="editor-header">
+            <div class="editor-title">
+              💻 <span>Python 编辑器</span>
+            </div>
+            <div class="editor-actions">
+              <button class="btn btn-secondary" id="btn-focus-code">↗ 专注代码</button>
+              <button class="btn btn-secondary" id="btn-reveal-solution">💡 查看答案</button>
+              <button class="btn btn-primary" id="btn-run">⚡ 运行代码</button>
+            </div>
+          </div>
+          <div class="editor-body" id="monaco-editor-body">
+            <!-- Monaco Editor mount point -->
+          </div>
+        </div>
+
+        <!-- Runtime IO Panels -->
+        <div class="runtime-panels">
+          <div class="stdin-container">
+            <div class="stdin-header">
+              <div class="stdin-title">
+                ⌨ <span>标准输入 (stdin)</span>
+              </div>
+              <button class="btn-console-clear" id="btn-clear-stdin">清空输入</button>
+            </div>
+            <textarea id="stdin-input" class="stdin-input" spellcheck="false" placeholder="需要 input() 时，在这里按行输入。"></textarea>
+          </div>
+
+          <div class="console-container">
+            <div class="console-header">
+              <div class="console-title">
+                📟 <span>控制台输出 (Terminal)</span>
+              </div>
+              <div class="console-actions">
+                <button class="btn-console-clear" id="btn-clear-console">清空控制台</button>
+              </div>
+            </div>
+            <div class="console-body" id="console-log">
+              <!-- Program logs output target -->
+            </div>
+          </div>
+        </div>
+        
+        <!-- Interactive Run Options -->
+        <div class="submit-action-row">
+          <button class="btn btn-success btn-submit-wide" id="btn-submit">
+            🚀 提交验证，冲向下一关！
+          </button>
+        </div>
+
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Level Success Confirmation Modal -->
+  <div class="modal-overlay" id="modal-overlay">
+    <div class="success-modal">
+      <div class="modal-icon">🎉</div>
+      <h2 class="modal-title">恭喜通关！</h2>
+      <p class="modal-text" id="modal-custom-text">你的 Python 魔法生效了！</p>
+      <button class="btn btn-success modal-close-btn" id="btn-close-modal">
+        继续下一关
+      </button>
+    </div>
+  </div>
+
+  <!-- Floating Answer Viewer -->
+  <section class="answer-panel" id="answer-panel" aria-hidden="true">
+    <div class="answer-panel-header" id="answer-panel-drag-handle">
+      <div class="answer-panel-title">
+        <span>💡</span>
+        <span id="answer-panel-title-text">参考答案</span>
+      </div>
+      <button class="answer-panel-close" id="btn-answer-panel-close" title="取消查看答案">×</button>
+    </div>
+    <div class="answer-panel-body">
+      <pre class="answer-code-view"><code id="answer-code-view"></code></pre>
+    </div>
+    <div class="answer-panel-resize" id="answer-panel-resize-handle" aria-hidden="true"></div>
+  </section>
+
+  <!-- Focused Code Workspace -->
+  <div class="focus-modal" id="focus-modal" aria-hidden="true">
+    <section class="focus-dialog" role="dialog" aria-modal="true" aria-label="专注代码">
+      <header class="focus-header">
+        <div>
+          <strong>专注代码</strong>
+          <span>Python 编辑器 · 单关练习</span>
+        </div>
+        <div class="focus-actions">
+          <button class="btn btn-primary" id="btn-focus-run">▶ 运行</button>
+          <button class="btn-icon focus-close" id="btn-focus-close" title="关闭专注模式">×</button>
+        </div>
+      </header>
+      <div class="focus-body">
+        <textarea id="focus-code-editor" class="focus-code-editor" spellcheck="false" aria-label="专注模式 Python 代码编辑器"></textarea>
+        <div class="focus-io-column">
+          <div class="stdin-container focus-stdin-panel">
+            <div class="stdin-header">
+              <div class="stdin-title">
+                <span>输入</span>
+                <em>stdin</em>
+              </div>
+            </div>
+            <textarea id="focus-stdin-input" class="stdin-input" spellcheck="false" placeholder="需要 input() 时，在这里按行输入。"></textarea>
+          </div>
+          <div class="console-container focus-console-panel">
+            <div class="console-header">
+              <div class="console-title">
+                <span>输出</span>
+                <em>Terminal</em>
+              </div>
+            </div>
+            <div class="console-body" id="focus-console-log"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Polished Confirmation Modal -->
+  <div class="confirm-modal-overlay" id="confirm-modal-overlay" aria-hidden="true">
+    <div class="confirm-modal" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title">
+      <div class="confirm-icon" id="confirm-modal-icon">⚠️</div>
+      <h2 class="confirm-title" id="confirm-modal-title">确认操作</h2>
+      <p class="confirm-text" id="confirm-modal-text">请确认是否继续。</p>
+      <div class="confirm-actions">
+        <button class="btn btn-secondary confirm-cancel-btn" id="btn-confirm-cancel">取消</button>
+        <button class="btn btn-primary confirm-accept-btn" id="btn-confirm-accept">确认</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Notification Area -->
+  <div class="toast-container" id="toast-container"></div>
+
+  <!-- Script tags injection -->
+  <script src="lessons.js?v=45"></script>
+  <script src="advanced_lessons.js?v=2"></script>
+  <script src="app.js?v=51"></script>
+</body>
+</html>
